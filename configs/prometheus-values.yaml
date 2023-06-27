@@ -1,0 +1,95 @@
+prometheus:
+  prometheusSpec:
+    additionalScrapeConfigs:
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+
+alertmanager:
+  config:
+    global:
+      telegram_api_url: "https://api.telegram.org"
+    route:
+      group_by: ['alertname']
+      repeat_interval: 1m
+      routes:
+        - match_re:
+            group_name: ^(kafka-group|producer-group|consumer-group)$
+          receiver: telegram-alert
+          continue: true
+        - matchers: [ '{severity!="info",group_name="producer-group"}' ]
+          receiver: webhook-producer
+          continue: true
+        - matchers: [ '{severity!="info",group_name="consumer-group"}' ]
+          receiver: 'webhook-consumer'
+          continue: true
+        - matchers: [ '{severity!="info",group_name="kafka-group"}' ]
+          receiver: webhook-kafka
+          continue: true
+    receivers:
+    - name: 'telegram-alert'
+      telegram_configs:
+      - bot_token: 0
+        api_url: https://api.telegram.org
+        chat_id: 0
+        parse_mode: ''
+    - name: 'webhook-producer'
+      webhook_configs:
+      - url: 'https://m3freuu51s5154ayz3493uf7.hooks.n8n.cloud/webhook-test/producer-workflow' 
+    - name: 'webhook-consumer'
+      webhook_configs:
+      - url: 'https://m3freuu51s5154ayz3493uf7.hooks.n8n.cloud/webhook-test/consumer-workflow' 
+    - name: 'webhook-kafka'
+      webhook_configs:
+      - url: 'https://m3freuu51s5154ayz3493uf7.hooks.n8n.cloud/webhook-test/kafka-workflow'
+
+additionalPrometheusRulesMap:
+  rule-name:
+    groups:
+      - name: kafka-group
+        rules:
+          - record: kafka_topic_lag_avg_over_time_1w
+            expr: avg_over_time(kminion_kafka_consumer_group_topic_lag[1w])
+          - record: kafka_topic_lag_stddev_over_time_1w
+            expr: stddev_over_time(kminion_kafka_consumer_group_topic_lag[1w])
+
+          - alert: ConsumerGroupTopicLag
+            expr: kminion_kafka_consumer_group_topic_lag > 100
+            for: 1m
+            labels:
+              severity: critical
+              group_name: kafka-group
+            annotations:
+              summary: "Consumer group {{ $labels.group_id }} is lagging"
+              description:  "Consumer group {{ $labels.group_id }} is lagging for topic {{ $labels.topic_name }}"
+
+          - alert: ConsumerGroupTopicLag_Z-score
+            expr: abs((kminion_kafka_consumer_group_topic_lag - kafka_topic_lag_avg_over_time_1w) / kafka_topic_lag_stddev_over_time_1w) > 3
+            for: 1m
+            labels:
+              severity: critical
+              group_name: kafka-group
+            annotations:
+              summary: "Consumer group {{ $labels.group_id }} is lagging"
+              description:  "Consumer group {{ $labels.group_id }} is lagging for topic {{ $labels.topic_name }}"

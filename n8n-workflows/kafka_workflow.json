@@ -1,0 +1,192 @@
+{
+  "name": "kafka-workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "kafka-workflow",
+        "options": {}
+      },
+      "id": "a547f561-4fb8-4f42-a4db-ad1cb6aaa591",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        880,
+        380
+      ],
+      "webhookId": "9bce0b7d-c032-4486-90c5-7c42b5d49827"
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.body.commonLabels.alertname }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "ConsumerGroupTopicLag"
+            },
+            {
+              "value2": "ConsumerGroupTopicLag_Z-score",
+              "output": 1
+            }
+          ]
+        },
+        "fallbackOutput": 3
+      },
+      "id": "52ec49f4-f4c5-4587-90cf-2df09e2e9821",
+      "name": "Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "command": "kubectl scale --current-replicas=1 --replicas=2 deployment/consumer -n processing"
+      },
+      "id": "efdf5b35-c7b6-4489-ae8d-0b35dad1d89c",
+      "name": "Execute Command",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1720,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://10.108.43.148:9090/api/v1/query?query=process_cpu_usage{app=\"consumer\"}",
+        "options": {}
+      },
+      "id": "f6edd9c0-af06-4d22-abc4-dc6ed08b604c",
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1360,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.data.result[0].value[0] }}",
+              "operation": "larger",
+              "value2": 0.7
+            }
+          ]
+        }
+      },
+      "id": "1c83e976-b1a4-4452-a282-932fcc329383",
+      "name": "IF",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "382030266",
+        "text": "✅ Количество реплик микросервиса <i><b>consumer</b></i> было автоматически поднято до <i><b>2</b></i>",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "8bd1108b-e3a6-4a93-8f5b-67974eb0feee",
+      "name": "Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1940,
+        180
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "1",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "IF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command": {
+      "main": [
+        [
+          {
+            "node": "Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "1776d77b-08db-453f-93f7-284610fc6549",
+  "id": "1",
+  "meta": {
+    "instanceId": "8493e410b4fc9cdb3ecc0bbdcb83e1f13f337aa74961f79c02f069195cbd5e85"
+  },
+  "tags": []
+}
